@@ -2,6 +2,21 @@
 
 > Ubicación del código: [`tool-use.ts`](./tool-use.ts)
 
+En esta sección comenzamos con nuestro primer patrón agéntico, **"Tool
+Use"**: primero vemos cómo el modelo falla estrepitosamente al intentar
+responder sin datos reales, y luego le damos herramientas que lo ayudan a
+resolver el problema de forma confiable.
+
+### Temas puntuales
+
+- Funciones para generar texto (`generateText`).
+- Modelos pensantes y no pensantes.
+- Creación de herramientas y funciones (`tool`, `inputSchema`, `execute`).
+- Buscar cursos (`findCourses`).
+- Calcular montos (`calculateTotal`).
+- Crear agentes con instrucciones específicas (`instructions` + `tools` +
+  `stopWhen`) que combinan todas las ideas anteriores.
+
 ## ¿Qué problema resuelve?
 
 Un modelo de lenguaje (LLM) solo "sabe" lo que vio durante su entrenamiento.
@@ -20,6 +35,57 @@ comportamientos posibles y ambos son malos:
 El patrón **Tool Use** resuelve esto dándole al modelo la capacidad de
 **llamar funciones reales** (herramientas) que consultan datos verdaderos o
 ejecutan lógica determinista, en lugar de "adivinar".
+
+## `generateText`: la función para generar texto
+
+Todo el patrón se apoya en `generateText` (de `ai`, el Vercel AI SDK). Es la
+función que envía un prompt (y, opcionalmente, herramientas) al modelo y
+**espera la respuesta completa** antes de devolverla (a diferencia de
+`streamText`, que va entregando el texto token a token). En este archivo se
+usa dos veces:
+
+- En `withoutTools()`: una sola llamada, sin `tools`, por lo que siempre
+  genera exactamente 1 "step".
+- En `withTools()`: con `tools` y `stopWhen`, por lo que puede generar
+  varios "steps" internos (pensar → llamar herramienta → leer resultado →
+  ...) hasta que el modelo decide responder con texto final.
+
+`generateText` acepta, entre otras, estas opciones usadas aquí:
+
+| Opción | Para qué sirve |
+|---|---|
+| `model` | Qué modelo de lenguaje usar (ver `model` en `src/helpers/selected-model.ts`) |
+| `prompt` | El mensaje del usuario |
+| `instructions` | El "system prompt": quién es el agente y qué reglas debe seguir |
+| `tools` | El mapa de herramientas disponibles para que el modelo las invoque |
+| `stopWhen` | La condición de parada (Circuit Breaker) |
+| `onStepEnd` | Callback que se dispara al terminar cada step (lo usa el `tracer`) |
+
+## Modelos pensantes y no pensantes
+
+El modelo concreto a usar se centraliza en
+[`src/helpers/selected-model.ts`](../../helpers/selected-model.ts), donde
+hay varias opciones comentadas (Groq, Anthropic, OpenAI, Gemini, Ollama).
+Esto es útil para entender una distinción importante a la hora de elegir
+modelo para un agente con herramientas:
+
+- **Modelos "no pensantes" (non-reasoning)**: responden directamente, sin un
+  paso explícito de razonamiento interno antes de decidir la respuesta o la
+  llamada a una herramienta. Suelen ser más rápidos y baratos (ej.
+  `gpt-5-mini`, `gemini-2.5-flash`, `claude-haiku-4-5`).
+- **Modelos "pensantes" (reasoning)**: generan un razonamiento interno
+  (cadena de pensamiento) antes de responder o de decidir qué herramienta
+  llamar y con qué argumentos. Suelen acertar mejor en tareas con varios
+  pasos (como encadenar `findCourses` → `calculateTotal`), a costa de más
+  tokens/latencia. El modelo usado por defecto en este proyecto,
+  `ollama('gpt-oss:20b')`, es un modelo de este tipo (`gpt-oss`, *open
+  source* y con capacidad de razonamiento).
+
+Para un patrón como Tool Use, donde el modelo debe decidir **cuándo** llamar
+una herramienta, **cuál** usar y **con qué argumentos** (y a veces
+encadenar varias), un modelo pensante tiende a ser más confiable en tareas
+con múltiples pasos, mientras que uno no pensante puede ser suficiente para
+casos de una sola herramienta y argumentos simples.
 
 ## Idea central
 
@@ -66,6 +132,26 @@ const QUESTION = `¿Cuánto costaria juntos el curso de TypeScript y el de Docke
 herramientas" queda comentado, pero se puede activar para comparar ambos
 resultados lado a lado con `console.table`).
 
+### Las dos herramientas del agente
+
+El agente de `withTools()` recibe exactamente dos herramientas, cada una
+resolviendo una parte distinta del problema:
+
+- **`findCourses`** — *Buscar cursos*: dado un `text` y/o `level`
+  (ambos opcionales), filtra `COURSE_CATALOG` y devuelve los cursos que
+  coinciden. Es la forma en que el modelo obtiene datos reales (id, precio,
+  horas) en lugar de inventarlos.
+- **`calculateTotal`** — *Calcular montos*: dado un arreglo de `ids` y un
+  `discountPercent`, busca esos cursos, suma sus precios (`subtotal`),
+  aplica el descuento y devuelve `subtotal`, `discount`, `total` y los
+  `notFound` (ids que no existen en el catálogo). Es la forma en que el
+  modelo delega la aritmética a código determinista.
+
+En la práctica, para responder la `QUESTION` de este archivo el modelo
+normalmente encadena ambas: primero llama `findCourses` (una o dos veces,
+para ubicar el curso de TypeScript y el de Docker), y luego llama
+`calculateTotal` con los `id` obtenidos y `discountPercent: 20`.
+
 ## Anatomía de una herramienta (`tool(...)`)
 
 Cada herramienta declarada con `tool()` (del paquete `ai`) tiene 3 partes:
@@ -96,6 +182,17 @@ const findCourses = tool({
 3. **`execute`**: la función real (puede ser async: llamar a una BD, una API,
    el sistema de archivos, etc.). Recibe los argumentos ya tipados y
    validados. Aquí, y solo aquí, ocurre el trabajo determinista.
+
+## Crear el agente: instrucciones + herramientas + Circuit Breaker
+
+`withTools()` es, en sí mismo, la creación de un agente con instrucciones
+específicas: junta el modelo, las dos herramientas (`findCourses` y
+`calculateTotal`) y un `instructions` que le da identidad y reglas de
+comportamiento ("Eres un asistente del catálogo de cursos de DevTalles...
+No inventes precios, duración ni nombres de cursos... Consúltalos siempre
+con las herramientas disponibles"). Ese `instructions` es lo que engrana
+todas las piezas anteriores: le dice al modelo *quién es* y *cuándo debe
+usar* cada herramienta, en vez de confiar en su memoria interna.
 
 ## Buenas prácticas que ejemplifica este código
 

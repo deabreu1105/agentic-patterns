@@ -39,4 +39,10 @@ import { ollama } from 'ollama-ai-provider-v2';
 // export const model = google('gemini-2.5-flash');
 
 // Ollama:
- export const model = ollama('gpt-oss:20b');
+export const model = ollama('gpt-oss:20b');
+// export const model = ollama('fynnhaupt2/unsloth-qwen2.5-coder-7b-instruct-128k-gguf:Q4_K_M');
+// export const model = ollama('llama3.1:8b');
+// export const model = ollama('qwen2.5:7b');
+// export const model = ollama('gemma3:4b');
+// export const model = ollama('gemma3:12b');
+
