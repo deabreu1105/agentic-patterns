@@ -9,6 +9,6 @@ console.clear();
 
 // await getMessageFromModelFailSafe();
 
-// await toolUseMain();
+ await toolUseMain();
 
-await planningMain();
+// await planningMain();
