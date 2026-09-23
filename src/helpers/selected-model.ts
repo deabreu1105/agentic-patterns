@@ -30,20 +30,20 @@ import { ollama } from 'ollama-ai-provider-v2';
 // export const model = groq('openai/gpt-oss-120b');
 
 // Anthropic: En este hay que comprar creditos si no no funciona
-export const model = anthropic('claude-haiku-4-5');   // Ctrl + espaciadora, salen los modelos
+// export const model = anthropic('claude-haiku-4-5');   // Ctrl + espaciadora, salen los modelos
 
 // OpenAI:
 // export const model = openai('gpt-5-mini');
 
 // Gemini:
-// export const model = google('gemini-2.5-flash');
+// export const model = google('gemini-3.6-flash');
 
 // Ollama:
 // * Para la computadora de la casa
 // export const model = ollama('gpt-oss:20b');
 // export const model = ollama('fynnhaupt2/unsloth-qwen2.5-coder-7b-instruct-128k-gguf:Q4_K_M');
 // export const model = ollama('llama3.1:8b');
-// export const model = ollama('qwen2.5:7b');
+export const model = ollama('qwen2.5:7b');
 // export const model = ollama('gemma3:4b');
 // export const model = ollama('gemma3:12b');
 

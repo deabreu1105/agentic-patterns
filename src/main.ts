@@ -2,6 +2,7 @@ import './helpers/string-colors.js';
 import { getMessageFromModel, getMessageFromModelFailSafe } from './actions/get-message-model.js';
 import { toolUseMain } from './patterns/01-tool-use/tool-use.js';
 import { planningMain } from './patterns/02-planning/planning.js';
+import { reflectionMain } from './patterns/03-reflection/reflection.js';
 
 console.clear();
 
@@ -11,4 +12,6 @@ console.clear();
 
 // await toolUseMain();
 
-await planningMain();
+// await planningMain();
+
+await reflectionMain();
